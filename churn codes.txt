@@ -1,0 +1,130 @@
+# This is how you call the packages
+library(caret)
+library(ggplot2)
+library(MASS)
+library(car)
+library(mlogit)
+library(sqldf)
+library(Hmisc)
+
+
+setwd("C:\\Users\\Admin\\Desktop\\Telecom Churn")
+
+# Reading data; just change the file path to fetch the data.
+data <- read.csv("churn.csv")
+head(data)
+# Data sanity check
+str(data)
+
+
+## Descriptive analysis
+summary(data)
+
+
+## Check the missing value (if any)
+sapply(data, function(x) sum(is.na(x)))
+
+data <- na.omit(data)
+
+nrow(data)
+
+
+names(data)
+
+
+
+# Logistic Regression on full data
+
+model <- glm(Churn.~State + Area.Code + Int.l.Plan + VMail.Plan + VMail.Message + Day.Mins + Day.Calls + Day.Charge + 
+Eve.Mins + Eve.Calls + Eve.Charge + Night.Mins + Night.Calls + Night.Charge + Intl.Mins + Intl.Calls + Intl.Charge +
+CustServ.Calls, data=data, family=binomial())
+summary(model)
+
+model <- glm(Churn.~Area.Code + Int.l.Plan + VMail.Plan + VMail.Message + Day.Mins + Day.Calls + Day.Charge + 
+Eve.Mins + Eve.Calls + Eve.Charge + Night.Mins + Night.Calls + Night.Charge + Intl.Mins + Intl.Calls + Intl.Charge +
+CustServ.Calls, data=data, family=binomial())
+summary(model)
+
+model <- glm(Churn.~ Int.l.Plan + VMail.Plan + VMail.Message + Day.Mins + Day.Calls + Day.Charge + 
+Eve.Mins + Eve.Calls + Eve.Charge + Night.Mins + Night.Calls + Night.Charge + Intl.Mins + Intl.Calls + Intl.Charge +
+CustServ.Calls, data=data, family=binomial())
+summary(model)
+
+model <- glm(Churn.~ Int.l.Plan + VMail.Plan + VMail.Message + Day.Mins + Day.Calls + 
+Eve.Mins + Eve.Calls + Eve.Charge + Night.Mins + Night.Calls + Intl.Mins + Intl.Calls + Intl.Charge +
+CustServ.Calls, data=data, family=binomial())
+summary(model)
+
+model <- glm(Churn.~ Int.l.Plan + VMail.Message + Day.Mins + Day.Calls + Eve.Calls + Eve.Charge + 
+Night.Mins + Night.Calls + Intl.Mins + Intl.Calls + Intl.Charge +CustServ.Calls, data=data, family=binomial())
+summary(model)
+
+model <- glm(Churn.~ Int.l.Plan + VMail.Message + Day.Mins + Day.Calls + Eve.Charge + 
+Night.Mins + Night.Calls + Intl.Mins + Intl.Calls + Intl.Charge +CustServ.Calls, data=data, family=binomial())
+summary(model)
+
+model <- glm(Churn.~ Int.l.Plan + VMail.Message + Day.Mins + Day.Calls + Eve.Charge + 
+Night.Mins + Intl.Mins + Intl.Calls + Intl.Charge +CustServ.Calls, data=data, family=binomial())
+summary(model)
+
+model <- glm(Churn.~ Int.l.Plan + VMail.Message + Day.Mins + Eve.Charge + 
+Night.Mins + Intl.Calls + Intl.Charge +CustServ.Calls, data=data, family=binomial())
+summary(model)
+
+model <- glm(Churn.~ Int.l.Plan + VMail.Message + Day.Mins + Eve.Charge + 
+Intl.Calls + Intl.Charge +CustServ.Calls, data=data, family=binomial())
+summary(model)
+
+vif(model)
+
+
+
+
+
+# R square (nagelkarke)
+modelChi <- model$null.deviance - model$deviance
+#Finding the degree of freedom for Null model and model with variables
+chidf <- model$df.null - model$df.residual
+chisq.prob <- 1 - pchisq(modelChi, chidf)
+R2.hl<-modelChi/model$null.deviance
+R.cs <- 1 - exp ((model$deviance - model$null.deviance) /nrow(data))
+R.n <- R.cs /(1-(exp(-(model$null.deviance/(nrow(data))))))
+R.n ## ranges from 0 to 1; closer to 1 better the model
+
+
+
+#####################################################################################################################
+
+# Predicted Probabilities
+prediction <- predict(model,newdata = data,type="response")
+data$Churn <- as.factor(data$Churn)
+library(pROC)
+rocCurve   <- roc(response = data$Churn, predictor = prediction, 
+levels = rev(levels(data$Churn)))
+predclass <-ifelse(prediction>coords(rocCurve,"best")[1],1,0)
+Confusion <- table(Predicted = predclass,Actual = data$Churn)
+AccuracyRate <- sum(diag(Confusion))/sum(Confusion)
+Gini <-2*auc(rocCurve)-1
+AUCmetric <- data.frame(c(coords(rocCurve,"best"),AUC=auc (rocCurve),AccuracyRate=AccuracyRate,Gini=Gini))
+AUCmetric <- data.frame(rownames(AUCmetric),AUCmetric)
+rownames(AUCmetric) <-NULL
+names(AUCmetric) <- c("Metric","Values")
+AUCmetric
+
+
+Confusion 
+plot(rocCurve)
+
+#########################################################################################################################
+### KS statistics calculation
+data$m1.yhat <- predict(model, data, type = "response")
+library(ROCR)
+m1.scores <- prediction(data$m1.yhat, data$Churn)
+plot(performance(m1.scores, "tpr", "fpr"), col = "red")
+abline(0,1, lty = 8, col = "grey")
+m1.perf <- performance(m1.scores, "tpr", "fpr")
+ks1.logit <- max(attr(m1.perf, "y.values")[[1]] - (attr(m1.perf, "x.values")[[1]]))
+ks1.logit # Thumb rule : should lie between 40 - 70
+############################################################################################################
+names(data)[23] <- "pred"
+write.csv(data,"churn_result.csv")
